@@ -4,7 +4,7 @@ from typing import Final
 
 START_DATE: Final = datetime.datetime(2026, 10, 11) # arbitrary start date at 12:00 am
 
-MAX_SIM_HOURS: Final = 0.1
+MAX_SIM_HOURS: Final = 8
 DT_CONTROLLER: Final = 0.25     # sampling time
 DUTY_CYCLE = 0.6                # expressed as decimal ratio of sampling time
 DT_SIMULATOR: Final = 0.05      # physics engine update frequency
