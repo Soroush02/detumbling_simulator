@@ -70,12 +70,14 @@ class SimulationController:
         
     def stepchange(self):
         total_duration = MAX_SIM_HOURS * 3600
-        progress_interval = total_duration / 10
+        progress_interval = total_duration / 20
         next_progress = progress_interval
         print(
             f"Simulation started for {MAX_SIM_HOURS} hours; "
             "the angular-velocity plot will open when it finishes."
+            "\nSimulation progress: 0%"
         )
+        
         while not self.is_simulation_ended():
             time_passed = self.real_time - self.start_time
             seconds_passed = time_passed.total_seconds()
@@ -83,8 +85,11 @@ class SimulationController:
             
             curr_date = self.real_time.date()
             B_eci = self.igrf.return_B_ECI(curr_date)
+            
+            # Converts B vector from ECI to satellite body frame
             B_rot_matrix = self.sat_model.get_DCM_matrix()
             B_body_true = B_rot_matrix @ B_eci
+            
             B_body_noisy = self.sat_model.add_B_noise(B_body_true)
 
             commanded_moment = self.bdot.stepchange(B_body_noisy)
@@ -116,15 +121,6 @@ class SimulationController:
         figure.tight_layout()
         plt.show()
 
-    def transform_B_Body(self, B_ECI):
-        '''
-        Converts B vector from ECI to satellite body frame using a direction 
-        cosine matrix. Both
-        '''
-
-        dcm_matrix = self.sat_model.get_DCM_matrix()
-        return
-
 
 class BDotController:
     max_moment: Final = MAX__MAGNETORQUER_MOMENT
@@ -149,7 +145,7 @@ class BDotController:
 
         self.B_array = np.full((5, 3), np.nan) # unfiltered measurements of B
         self.moment = np.zeros(( 3 ))
-        self.min_inertia_tensor = np.min(INERTIA_MATRIX) # matrix must be diagonalised
+        self.min_inertia_tensor = np.min(INERTIA_MATRIX.diagonal()) # matrix must be diagonalised
         self.orbit = orbital_model
         self.total_steps_per_cycle = total_steps_per_cycle
 
@@ -294,6 +290,7 @@ class IGRFModel:
     def ECEF_to_geodetic(self, coordinates):
         '''
         Convert an ECEF position in metres to geodetic coordinates.
+        Written with AI assistance.
         '''
 
         x, y, z = coordinates
@@ -330,7 +327,7 @@ class IGRFModel:
                     ),
                 )
 
-        return math.degrees(longitude), math.degrees(latitude), height / 1000,
+        return math.degrees(longitude), math.degrees(latitude), height / 1000
             
     def Kepler_to_ECI(self):
             '''
