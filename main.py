@@ -119,6 +119,7 @@ class SimulationController:
         axes.grid(True)
         axes.legend()
         figure.tight_layout()
+        plt.savefig('simulation_results.png')
         plt.show()
 
 
