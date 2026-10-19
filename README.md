@@ -3,8 +3,8 @@
 See it in action below:
 
 <p align="center">
-  <img width="auto" height="320px" alt="Figure_gg" src="https://github.com/user-attachments/assets/7f2cd89f-b433-434b-a49f-5ecb971e76bd" />
-  <img width="auto" height="320px" alt="Figure_Final" src="https://github.com/user-attachments/assets/11d7fbf9-e804-433c-ba6d-1bef483d35fc" />
+  <img width="auto" height="280px" alt="Figure_gg" src="https://github.com/user-attachments/assets/7f2cd89f-b433-434b-a49f-5ecb971e76bd" />
+  <img width="auto" height="280px" alt="Figure_Final" src="https://github.com/user-attachments/assets/11d7fbf9-e804-433c-ba6d-1bef483d35fc" />
 </p>
 
 Time taken to compute scales proportionally to `MAX_SIM_HOURS` and inversely proportional to `DT_SIMULATOR`. For reference, a full 8-hour simulation takes around 1 hour to compute with `DT_SIMULATOR = 0.05`.
