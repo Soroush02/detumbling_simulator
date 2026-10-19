@@ -39,7 +39,7 @@ def validate_time_steps():
         duty_steps = DUTY_CYCLE * DT_CONTROLLER / DT_SIMULATOR
         if not duty_steps.is_integer():
             duty_steps = round(duty_steps)
-            print(f"Adjusted DUTY_CYCLE to: {duty_steps / controller_period * DT_SIMULATOR} s")
+            print(f"Adjusted DUTY_CYCLE to: {duty_steps / controller_period * DT_SIMULATOR}")
         return int(total_steps), int(duty_steps)
 
 
