@@ -1,21 +1,20 @@
-## Update: The code is (somewhat) functional
+## Update: The Code is Fully Functional!
 
 See it in action below:
 
-This is a 2-hour simulation (with `DT_SIMULATOR = 0.02`):
+<p align="center">
+<img width="auto" height="350px" alt="Figure_???" src="https://github.com/user-attachments/assets/aba70448-b59a-4984-b1df-05e8ae1702e8" />
+<img width="auto" height="350px" alt="Figure_Final" src="https://github.com/user-attachments/assets/11d7fbf9-e804-433c-ba6d-1bef483d35fc" />
+</p>
 
-<img width="640" height="480" alt="Figure_3" src="https://github.com/user-attachments/assets/df8aba1a-b61c-4a0b-a77d-bcd8f827e726" />
-
-A full simulation yields unexpected results:
-
-<img width="640" height="480" alt="Figure_2" src="https://github.com/user-attachments/assets/27749ca3-d003-4a02-82be-97c2aee5d5e6" />
-
-(This full 8-hour simulation takes around 1 hour to compute with `DT_SIMULATOR = 0.05`)
+Time taken to compute scales proportionally to `MAX_SIM_HOURS` and inversely proportional to `DT_SIMULATOR`. For reference, a full 8-hour simulation takes around 1 hour to compute with `DT_SIMULATOR = 0.05`.
 
 #### Issues fixed the morning after submission:
 
 * **Changed starting parameters** - I realised I entered random placeholders for some parameters (e.g. inertia tensors = 1) and forgot to change them to realistic values.
+* Changed the minus in line 475 (`qnew = (... - ...)`) to a plus, fixing a typo to make it consistent with my logbook.
 * Changed line 155 from `np.min(INERTIA_MATRIX)` to `np.min(INERTIA_MATRIX.diagonal())`. Since the former always output 0 (for a diagonal matrix), `BDot.update_desired_moment()` would always output `[0. 0. 0.]`; this is now fixed.
+* Added the `.inv()` modifier to the rotation defined in `SatelliteDynamics.get_DCM_matrix()`. This ensures the rotation is passive rather than active.
 * Deleted method `SimulationController.transform_B_Body()`, which repeatetd code already in `SimulationController.stepchange()`.
-* Make progress indicator show every 5% for clarity.
+* Make progress indicator show every 1% for clarity.
 * Add `plt.savefig()` (line 122) to save simulation results.
