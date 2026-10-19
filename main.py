@@ -44,11 +44,11 @@ def validate_time_steps():
 
 
 class SimulationController:
+'''
+Controller is the class responsible for managing the simulation engine and 
+classes OrbitalModel, IGRFModel, SatelliteDynamics and BDotController.
+'''
     start_time = START_DATE
-    '''
-    Controller is the class responsible for managing the simulation engine and 
-    classes OrbitalModel, IGRFModel, SatelliteDynamics and BDotController
-    '''
     
     def __init__(self, total_steps_per_cycle, steps_per_duty_cycle):
         self.start_time = self.real_time = START_DATE
@@ -69,11 +69,9 @@ class SimulationController:
     def stepchange(self):
         '''
         Overall simulator logic; updates orbital parameters, calculates state 
-        changes, manages B-dot controller, and gets net torque per physics timestep, 
-        using methods from all classes. Then plots results once the simulation is 
-        finished.
+        changes, manages B-dot controller, and gets net torque per physics timestep,
+        then plots results once the simulation is finished.
         '''
-        
         total_duration = MAX_SIM_HOURS * 3600
         progress_interval = total_duration / 100
         next_progress = progress_interval
@@ -181,7 +179,6 @@ class BDotController:
         taking only the rate of change of unit B vectors to enable a 
         projection-based controller.
         '''
-
         # Calculate last 5 B unit vectors
         norms = np.linalg.norm(B_arr, axis=-1, keepdims=True)
         norms[norms == 0] = 1.  # prevent division by 0
@@ -197,7 +194,6 @@ class BDotController:
         and finite differentiation functions with a projection-based B-dot control
         law.
         '''
-
         # update self.B_array with raw value
         self.B_array = np.roll(self.B_array, -1, axis=0)
         self.B_array[-1] = B_reading # updates latest B value in array
@@ -225,17 +221,17 @@ class BDotController:
                 self.moment = self.update_desired_moment(B_reading)
             self.increment_mode()
             return np.zeros(( 3 ))
-        if self.mode == 0: # off (dissipating)
+        if self.mode == 0: # off (dissipating) mode
             self.increment_mode()
             return np.zeros(( 3 ))
-        if self.mode == 1: # off (measuring)
+        if self.mode == 1: # off (measuring) mode
             self.moment = self.update_desired_moment(B_reading)
             abs_moment_ratio = np.absolute(self.moment / self.max_moment)
             duty_time = self.mode_lengths[2]
             self.t_on = duty_time * np.clip(abs_moment_ratio, a_min=0, a_max=1)
             self.increment_mode()
             return np.zeros(( 3 ))
-        if self.mode == 2: # on (actuating)
+        if self.mode == 2: # on (actuating) mode
             actual_moment = np.full(3, np.nan)
             for i in range(len(actual_moment)):
                 if (self.mode_elapsed >= self.t_on[i] 
@@ -260,7 +256,6 @@ class IGRFModel:
         the IGRF model. Then passes through ppigrf to get ENU (east, north, up)
         coordinates of B field vector, which is converted to ECI frame.
         '''
-
         # get ecef position vector
         eci = self.Kepler_to_ECI()
         ecef = self.ECI_to_ECEF(eci)
@@ -290,7 +285,6 @@ class IGRFModel:
         Convert an ECEF position in metres to geodetic coordinates.
         Written with AI assistance.
         '''
-
         x, y, z = coordinates
         semi_major_axis = 6378137.0
         eccentricity_squared = 6.69437999014e-3
@@ -322,23 +316,23 @@ class IGRFModel:
         return math.degrees(longitude), math.degrees(latitude), height / 1000
             
     def Kepler_to_ECI(self):
-            '''
-            Accesses instance attributes of Orbit and uses them to calculate 
-            a position vector of the satellite in the perifocal frame, then 
-            transform into the ECI frame (see logbook entry 2/10).
-            '''
+        '''
+        Accesses instance attributes of Orbit and uses them to calculate 
+        a position vector of the satellite in the perifocal frame, then 
+        transform into the ECI frame.
+        '''
 
-            r_peri = np.array([math.cos(self.orbit.ANOM), math.sin(self.orbit.ANOM), 0])
-            r_peri *= self.orbit.SEMI * (1 - self.orbit.ECCT ** 2) / (1 + self.orbit.ECCT * math.cos(self.orbit.ANOM))
-            rot = Rotation.from_euler("ZXZ", [self.orbit.RAAN, self.orbit.INCL, self.orbit.ARGP])
-            r_ECI = rot.as_matrix() @ r_peri
-            return r_ECI
+        r_peri = np.array([math.cos(self.orbit.ANOM), math.sin(self.orbit.ANOM), 0])
+        r_peri *= self.orbit.SEMI * (1 - self.orbit.ECCT ** 2) / (1 + self.orbit.ECCT * math.cos(self.orbit.ANOM))
+        rot = Rotation.from_euler("ZXZ", [self.orbit.RAAN, self.orbit.INCL, self.orbit.ARGP])
+        r_ECI = rot.as_matrix() @ r_peri
+        return r_ECI
 
     def ECI_to_ECEF(self, coordinates, direction="forward"):
         '''
-        eta represents the change in rotation from the time ECI and ECEF frames coincided 
-        (see entry 2/10 for details). direction="forward" represents ECI -> ECEF  
-        transformation while direction="reverse" represents ECEF -> ECI.
+        eta represents the change in rotation from the time ECI and ECEF frames 
+        coincided. direction="forward" represents ECI -> ECEF  transformation 
+        while direction="reverse" represents ECEF -> ECI.
         '''
         eta = self.omega_E * self.orbit.last_periapsis
         rot = Rotation.from_euler("Z", -eta)
@@ -363,7 +357,12 @@ class OrbitalModel:
         self.dQ = np.nan # rate of change of RAAN (constant)
         self.dA = np.nan # rate of change of argument of periapsis (constant)
     
-    def model_J2_effect(self):            
+    def model_J2_effect(self):
+        '''
+        Models the J2 perturbation effect caused by the Earth's oblateness.
+        Changes 2 Kepler elements (orbital parameters) by a constant amount per 
+        timestep.
+        '''
         if np.isnan(self.dQ):
             raan_numer = -3 * self.J2_const * self.RE**2 * math.sqrt(self.GP) * math.cos(self.INCL)
             raan_denom = 2 * self.SEMI**3.5 * (1 - self.ECCT**2)**2
@@ -379,6 +378,10 @@ class OrbitalModel:
         self.ARGP = self.ARGP % (2 * math.pi)
 
     def update_true_anomaly(self):
+        '''
+        Solves for the true anomaly of the satellite per timestep using 
+        Newton's iterative method.
+        '''
         mean_motion = (self.GP / self.SEMI**3) ** 0.5                           # units: rad/s
         mean_anomaly = (mean_motion * self.last_periapsis) % (2 * math.pi)      # units: rad
 
@@ -402,7 +405,7 @@ class OrbitalModel:
 
 class SatelliteDynamics:
     def __init__(self, orbital_model):
-        # represents rotation of body fram relative to ECI:
+        # self.q represents rotation of body fram relative to ECI
         self.q = np.asarray(INITIAL_ORIENTATION, dtype=float)
         self.w = INITIAL_ANGULAR_VELOCITY.copy() # in the body frame
         self.I = INERTIA_MATRIX.copy()  # diagonal 3x3 matrix
@@ -411,13 +414,16 @@ class SatelliteDynamics:
     def get_DCM_matrix(self):
         '''
         Create direction cosine matrix that describes transformation from ECI 
-        to satellite body frame. (See page 8.)
+        to satellite body frame.
         '''
-
         r = Rotation.from_quat(self.q, scalar_first=True).inv()
         return r.as_matrix()
 
     def add_B_noise(self, true_B):
+        '''
+        Simulates added noise and least significant bit error to 
+        magnetometer readings.
+        '''
         static_noise = MAGNETOMETER_HARD_IRON_BIAS * 1e-6
         rng = np.random.default_rng()
         random_noise = rng.normal(loc=0.0, scale=1.8408e-6, size=3)
@@ -429,12 +435,11 @@ class SatelliteDynamics:
 
     def compute_net_torque(self, commanded_moment, B_body):
         '''
-         ---
         Computes effected torque from commanded dipole moment. 
-        SKIPPED DUE TO TIME CONSTRAINTS - adds disturbance torques 
+        
+        SKIPPED DUE TO TIME CONSTRAINTS: Add disturbance torques 
         (residual atmospheric drag, gravity gradient torque, and 
-        residual magnetoric dipole and Lorentz forces). Then calculates 
-        total change in states.
+        residual magnetoric dipole and Lorentz forces).
         '''
         return np.cross(commanded_moment, B_body)
 
@@ -452,6 +457,11 @@ class SatelliteDynamics:
         return y_final
     
     def update_states(self, net_torque: np.ndarray, B_rot_matrix: np.ndarray, t0: float, dt: float):
+        '''
+        Update orientation (via a closed-form solution) and 
+        angular velocity (using RK4 integration), assuming angular 
+        velocity is virtually constant over a single timestep.
+        '''
         # Euler's rigid-body equation
         def w_dot(t, y):
             return np.linalg.solve(self.I, net_torque - np.cross(y, self.I @ y))
