@@ -52,8 +52,6 @@ class SimulationController:
     
     def __init__(self, total_steps_per_cycle, steps_per_duty_cycle):
         self.start_time = self.real_time = START_DATE
-        self.Ts = total_steps_per_cycle
-        self.Tdis = steps_per_duty_cycle
         self.orbit = OrbitalModel()
         self.igrf = IGRFModel(self.orbit)
         self.sat_model = SatelliteDynamics(self.orbit)
@@ -70,7 +68,7 @@ class SimulationController:
         
     def stepchange(self):
         total_duration = MAX_SIM_HOURS * 3600
-        progress_interval = total_duration / 20
+        progress_interval = total_duration / 100
         next_progress = progress_interval
         print(
             f"Simulation started for {MAX_SIM_HOURS} hours; "
@@ -92,7 +90,7 @@ class SimulationController:
             
             B_body_noisy = self.sat_model.add_B_noise(B_body_true)
 
-            commanded_moment = self.bdot.stepchange(B_body_noisy)
+            commanded_moment = self.bdot.stepchange(B_body_noisy, self.sat_model.w)
             net_torque = self.sat_model.compute_net_torque(commanded_moment, B_body_true)
             self.sat_model.update_states(net_torque, B_rot_matrix, seconds_passed, DT_SIMULATOR)
 
@@ -113,7 +111,7 @@ class SimulationController:
         figure, axes = plt.subplots()
         for axis, component in enumerate(("x", "y", "z")):
             axes.plot(times_hours, angular_velocity[:, axis], label=f"ω{component}")
-        axes.set_title("Angular velocity over time")
+        axes.set_title(f"Angular velocity over time (DT_SIMULATOR = {DT_SIMULATOR}, DT_CONTROLLER = {DT_CONTROLLER})")
         axes.set_xlabel("Time (hours)")
         axes.set_ylabel("Angular velocity (rad/s)")
         axes.grid(True)
@@ -127,28 +125,19 @@ class BDotController:
     max_moment: Final = MAX__MAGNETORQUER_MOMENT
     
     def __init__(self, total_steps_per_cycle, steps_per_duty_cycle, orbital_model):
-        if (
-            self.max_moment.shape != (3,)
-            or not np.isfinite(self.max_moment).all()
-            or np.any(self.max_moment <= 0)
-        ):
-            raise ValueError(
-                "MAX__MAGNETORQUER_MOMENT must contain three positive per-axis limits."
-            )
-
         self.mode = -1 # initialising mode
         self.mode_elapsed = 0 # number of steps elapsed during the current mode
         self.mode_length = total_steps_per_cycle * 4 # initialising mode is 4 cycles long (to get 5 initial measurements)
         self.mode_lengths = np.array([total_steps_per_cycle - steps_per_duty_cycle - 1, 
                                       1, 
                                       steps_per_duty_cycle]) # steps lengths for modes 0, 1, 2
+        self.total_steps_per_cycle = total_steps_per_cycle
         self.t_on: np.ndarray = np.full(3, np.nan) # takes only zero or positive values
 
         self.B_array = np.full((5, 3), np.nan) # unfiltered measurements of B
         self.moment = np.zeros(( 3 ))
         self.min_inertia_tensor = np.min(INERTIA_MATRIX.diagonal()) # matrix must be diagonalised
         self.orbit = orbital_model
-        self.total_steps_per_cycle = total_steps_per_cycle
 
     def increment_mode(self):
         '''
@@ -166,7 +155,6 @@ class BDotController:
         if not mode_complete:
             self.mode_elapsed += 1
             return
-
         next_mode = (self.mode + 1) % 3
         self.mode = next_mode
         self.mode_elapsed = 0
@@ -221,7 +209,7 @@ class BDotController:
         moment = -k / np.linalg.norm(filtered_B_arr[-1]) * Bdot
         return moment
     
-    def stepchange(self, B_reading):
+    def stepchange(self, B_reading, angular_velocity: np.ndarray):
         while self.mode >= 0 and self.mode_length == 0:
             self.increment_mode()
 
@@ -243,10 +231,11 @@ class BDotController:
         if self.mode == 2: # on (actuating)
             actual_moment = np.full(3, np.nan)
             for i in range(len(actual_moment)):
-                if self.mode_elapsed < self.t_on[i]:
-                    actual_moment[i] = np.sign(self.moment[i]) * self.max_moment[i]
-                else:
+                if (self.mode_elapsed >= self.t_on[i] 
+                    or np.abs(angular_velocity[i]) < math.radians(1)):
                     actual_moment[i] = 0.
+                else:
+                    actual_moment[i] = np.sign(self.moment[i]) * self.max_moment[i]
             self.increment_mode()
             return actual_moment
 
@@ -281,8 +270,8 @@ class IGRFModel:
         sin_lat, cos_lat = math.sin(lat_rad), math.cos(lat_rad)
         enu_to_ecef = np.array([
             [-sin_lon, -sin_lat * cos_lon, cos_lat * cos_lon],
-            [cos_lon, -sin_lat * sin_lon, cos_lat * sin_lon],
-            [0.0, cos_lat, sin_lat],
+            [ cos_lon, -sin_lat * sin_lon, cos_lat * sin_lon],
+            [     0.0,            cos_lat,           sin_lat],
         ])
         B_ecef = enu_to_ecef @ B_enu
         B_eci = self.ECI_to_ECEF(B_ecef, direction="reverse")
@@ -321,9 +310,7 @@ class IGRFModel:
                     z,
                     horizontal_radius
                     * (
-                        1
-                        - eccentricity_squared
-                        * prime_vertical_radius
+                        1 - eccentricity_squared * prime_vertical_radius
                         / (prime_vertical_radius + height)
                     ),
                 )
@@ -411,13 +398,11 @@ class OrbitalModel:
 
 class SatelliteDynamics:
     def __init__(self, orbital_model):
+        # represents rotation of body fram relative to ECI:
         self.q = np.asarray(INITIAL_ORIENTATION, dtype=float)
-        self.w = INITIAL_ANGULAR_VELOCITY.copy()
-        self.I = INERTIA_MATRIX  # diagonal 3x3 matrix
+        self.w = INITIAL_ANGULAR_VELOCITY.copy() # in the body frame
+        self.I = INERTIA_MATRIX.copy()  # diagonal 3x3 matrix
         self.orbit = orbital_model
-
-    def calculate_linear_velocity(self):
-        pass
         
     def get_DCM_matrix(self):
         '''
@@ -425,7 +410,7 @@ class SatelliteDynamics:
         to satellite body frame. (See page 8.)
         '''
 
-        r = Rotation.from_quat(self.q, scalar_first=True)
+        r = Rotation.from_quat(self.q, scalar_first=True).inv()
         return r.as_matrix()
 
     def add_B_noise(self, true_B):
@@ -484,9 +469,9 @@ class SatelliteDynamics:
         else:
             q_new = (
                 np.cos(inner) * np.identity(4)
-                - np.sin(inner) / norm_w * omega_matrix
+                + np.sin(inner) / norm_w * omega_matrix
             ) @ self.q
-            q_new /= np.linalg.norm(q_new)
+            q_new = q_new / np.linalg.norm(q_new)
 
         # Update state attributes
         self.w = w_new
