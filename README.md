@@ -1,13 +1,16 @@
-## Announcement: The code is (partially) functional!
+## Update: The code is (somewhat) functional
 
 See it in action below:
 
-This is a 1-hour simulation:
-<img width="640" height="480" alt="Figure_1" src="https://github.com/user-attachments/assets/92373a65-f2d0-4c2e-80f1-f4e4296a544a" />
+This is a 2-hour simulation (with `DT_SIMULATOR = 0.02`):
+
+<img width="640" height="480" alt="Figure_3" src="https://github.com/user-attachments/assets/df8aba1a-b61c-4a0b-a77d-bcd8f827e726" />
 
 A full simulation yields unexpected results:
+
 <img width="640" height="480" alt="Figure_2" src="https://github.com/user-attachments/assets/27749ca3-d003-4a02-82be-97c2aee5d5e6" />
-(A full 8-hour simulation takes around 1 hour to compute.)
+
+(This full 8-hour simulation takes around 1 hour to compute with `DT_SIMULATOR = 0.05`)
 
 #### Issues fixed the morning after submission:
 
