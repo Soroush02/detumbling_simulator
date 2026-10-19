@@ -15,6 +15,7 @@ Time taken to compute scales proportionally to `MAX_SIM_HOURS` and inversely pro
 * Changed the minus in line 475 (`qnew = (... - ...)`) to a plus, fixing a typo to make it consistent with my logbook.
 * Changed line 155 from `np.min(INERTIA_MATRIX)` to `np.min(INERTIA_MATRIX.diagonal())`. Since the former always output 0 (for a diagonal matrix), `BDot.update_desired_moment()` would always output `[0. 0. 0.]`; this is now fixed.
 * Added the `.inv()` modifier to the rotation defined in `SatelliteDynamics.get_DCM_matrix()`. This ensures the rotation is passive rather than active.
+* Added a check in `BDotController.stepchange()` to prevent unnecessary commanded moments if angular velocity is already below 1º/sec.
 * Deleted method `SimulationController.transform_B_Body()`, which repeatetd code already in `SimulationController.stepchange()`.
 * Make progress indicator show every 1% for clarity.
 * Add `plt.savefig()` (line 122) to save simulation results.
