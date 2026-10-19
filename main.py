@@ -23,31 +23,40 @@ def main():
 
 
 def validate_time_steps():
+    """
+    Ensures controller peiod and period of dissipation and actuation are 
+    integer multiples of DT_SIMULATOR (so that there are a whole number of 
+    simulation steps within each), and adjusts controller and/or duty 
+    cycle if necessary.
+    """
     total_steps = DT_CONTROLLER / DT_SIMULATOR
     if total_steps.is_integer():
         controller_period = total_steps * DT_SIMULATOR
     else:
         total_steps = round(total_steps)
         controller_period = total_steps * DT_SIMULATOR
-        print(f"Adjusted DT_CONTROLLER (controller period) to: {controller_period} s")
+        print(f"Adjusted DT_CONTROLLER (controller period) to: "
+              f"{controller_period} s")
 
     # Ensure dissipation time at least 0.25 s
     if (1 - DUTY_CYCLE) * DT_CONTROLLER < 0.025:
-        print("Duty cycle increased to meet minimum magnetorquer dissipation time requirements.")
+        print("Duty cycle increased to meet minimum magnetorquer dissipation "
+              "time requirements.")
         duty_steps = total_steps - math.ceil(0.025 / DT_SIMULATOR)
         return int(total_steps), int(duty_steps)
     duty_steps = DUTY_CYCLE * DT_CONTROLLER / DT_SIMULATOR
     if not duty_steps.is_integer():
         duty_steps = round(duty_steps)
-        print(f"Adjusted DUTY_CYCLE to: {duty_steps / controller_period * DT_SIMULATOR}")
+        print(f"Adjusted DUTY_CYCLE to: "
+              f"{duty_steps / controller_period * DT_SIMULATOR}")
     return int(total_steps), int(duty_steps)
 
 
 class SimulationController:
-'''
-Controller is the class responsible for managing the simulation engine and 
-classes OrbitalModel, IGRFModel, SatelliteDynamics and BDotController.
-'''
+    """
+    Controller is the class responsible for managing the simulation engine and 
+    classes OrbitalModel, IGRFModel, SatelliteDynamics and BDotController.
+    """
     start_time = START_DATE
     
     def __init__(self, total_steps_per_cycle, steps_per_duty_cycle):
@@ -55,7 +64,9 @@ classes OrbitalModel, IGRFModel, SatelliteDynamics and BDotController.
         self.orbit = OrbitalModel()
         self.igrf = IGRFModel(self.orbit)
         self.sat_model = SatelliteDynamics(self.orbit)
-        self.bdot = BDotController(total_steps_per_cycle, steps_per_duty_cycle, self.orbit)
+        self.bdot = BDotController(
+            total_steps_per_cycle, steps_per_duty_cycle, self.orbit
+        )
         self.angular_velocity_times = [0.0]
         self.angular_velocity_history = [self.sat_model.w.copy()]
 
@@ -67,11 +78,11 @@ classes OrbitalModel, IGRFModel, SatelliteDynamics and BDotController.
         return self.real_time >= end_time
         
     def stepchange(self):
-        '''
+        """
         Overall simulator logic; updates orbital parameters, calculates state 
-        changes, manages B-dot controller, and gets net torque per physics timestep,
-        then plots results once the simulation is finished.
-        '''
+        changes, manages B-dot controller, and gets net torque per physics 
+        timestep, then plots results once the simulation is finished.
+        """
         total_duration = MAX_SIM_HOURS * 3600
         progress_interval = total_duration / 100
         next_progress = progress_interval
@@ -94,12 +105,20 @@ classes OrbitalModel, IGRFModel, SatelliteDynamics and BDotController.
             B_body_true = B_rot_matrix @ B_eci
             B_body_noisy = self.sat_model.add_B_noise(B_body_true)
 
-            commanded_moment = self.bdot.stepchange(B_body_noisy, self.sat_model.w)
-            net_torque = self.sat_model.compute_net_torque(commanded_moment, B_body_true)
-            self.sat_model.update_states(net_torque, B_rot_matrix, seconds_passed, DT_SIMULATOR)
+            commanded_moment = self.bdot.stepchange(
+                B_body_noisy, self.sat_model.w
+            )
+            net_torque = self.sat_model.compute_net_torque(
+                commanded_moment, B_body_true
+            )
+            self.sat_model.update_states(
+                net_torque, B_rot_matrix, seconds_passed, DT_SIMULATOR
+            )
 
             self.real_time += datetime.timedelta(seconds=DT_SIMULATOR)
-            elapsed_seconds = (self.real_time - self.start_time).total_seconds()
+            elapsed_seconds = (
+                self.real_time - self.start_time
+            ).total_seconds()
             self.angular_velocity_times.append(elapsed_seconds)
             self.angular_velocity_history.append(self.sat_model.w.copy())
             
@@ -115,44 +134,53 @@ classes OrbitalModel, IGRFModel, SatelliteDynamics and BDotController.
         angular_velocity = np.asarray(self.angular_velocity_history)
         figure, axes = plt.subplots()
         for axis, component in enumerate(("x", "y", "z")):
-            axes.plot(times_hours, angular_velocity[:, axis], label=f"ω{component}")
-        axes.set_title(f"Angular velocity over time (DT_SIMULATOR = {DT_SIMULATOR}, DT_CONTROLLER = {DT_CONTROLLER})")
+            axes.plot(
+                times_hours, angular_velocity[:, axis], label=f"ω{component}"
+            )
+        axes.set_title(
+            f"Angular velocity over time (DT_SIMULATOR = {DT_SIMULATOR}, "
+            f"DT_CONTROLLER = {DT_CONTROLLER})"
+        )
         axes.set_xlabel("Time (hours)")
         axes.set_ylabel("Angular velocity (rad/s)")
         axes.grid(True)
         axes.legend()
         figure.tight_layout()
-        plt.savefig('simulation_results.png')
+        plt.savefig("simulation_results.png")
         plt.show()
 
 
 class BDotController:
     max_moment: Final = MAX__MAGNETORQUER_MOMENT
     
-    def __init__(self, total_steps_per_cycle, steps_per_duty_cycle, orbital_model):
+    def __init__(self, total_steps_per_cycle, steps_per_duty_cycle, 
+                 orbital_model):
         self.mode = -1 # initialising mode
-        self.mode_elapsed = 0 # number of steps elapsed during the current mode
-        self.mode_length = total_steps_per_cycle * 4 # initialising mode is 4 cycles long (to get 5 initial measurements)
-        self.mode_lengths = np.array([total_steps_per_cycle - steps_per_duty_cycle - 1, 
-                                      1, 
-                                      steps_per_duty_cycle]) # steps lengths for modes 0, 1, 2
+        self.mode_elapsed = 0 # number of steps elapsed during current mode
+        # initialising mode is 4 cycles long (to get 5 initial measurements)
+        self.mode_length = total_steps_per_cycle * 4
+        self.mode_lengths = np.array(
+            [total_steps_per_cycle - steps_per_duty_cycle - 1, 
+             1, steps_per_duty_cycle]
+        ) # steps lengths for modes 0, 1, 2
         self.total_steps_per_cycle = total_steps_per_cycle
-        self.t_on: np.ndarray = np.full(3, np.nan) # takes only zero or positive values
+        self.t_on: np.ndarray = np.full(3, np.nan) # takes only values >= 0
 
         self.B_array = np.full((5, 3), np.nan) # unfiltered measurements of B
         self.moment = np.zeros(( 3 ))
-        self.min_inertia_tensor = np.min(INERTIA_MATRIX.diagonal()) # matrix must be diagonalised
+        # matrix must be diagonalised!
+        self.min_inertia_tensor = np.min(INERTIA_MATRIX.diagonal())
         self.orbit = orbital_model
 
     def increment_mode(self):
-        '''
+        """
         Alternate between different modes in each control cycle period.
         modes = {
             "off (initialising)": -1,
             "off (dissipating)": 0,
             "off (measuring)": 1, 
             "on (actuating)": 2 }
-        '''
+        """
         mode_complete = (
             self.mode_elapsed >= self.mode_length if self.mode == -1
             else self.mode_elapsed + 1 >= self.mode_length
@@ -166,34 +194,35 @@ class BDotController:
         self.mode_length = self.mode_lengths[next_mode]
     
     def return_filtered_points(self):
-        '''
-        Initially planned to use a Savitzky–Golay filter (polynomial fit) or a 
+        """
+        Initially planned to use a Savitzky–Golay filter (polynomial fit) or a
         moving average, but later abandoned due to time constraints.
         
-        '''
+        """
         return self.B_array # does nothing
 
     def finite_differentiate(self, B_arr):
-        '''
+        """
         Finite differentiates to find B_dot using the 5-point stencil method,
         taking only the rate of change of unit B vectors to enable a 
         projection-based controller.
-        '''
+        """
         # Calculate last 5 B unit vectors
         norms = np.linalg.norm(B_arr, axis=-1, keepdims=True)
         norms[norms == 0] = 1.  # prevent division by 0
         B_unit_arr = B_arr / norms
 
         coefficients = np.array([3, -16, 36, -48, 25])
-        b_dot = np.sum(coefficients[:, np.newaxis] * B_unit_arr, axis=0) / (12 * DT_CONTROLLER)
+        b_dot = (np.sum(coefficients[:, np.newaxis] * B_unit_arr, axis=0) 
+                 / (12 * DT_CONTROLLER))
         return b_dot
 
     def update_desired_moment(self, B_reading):
-        '''
-        Output the final commanded moment, combining filtering (not implemented)
-        and finite differentiation functions with a projection-based B-dot control
-        law.
-        '''
+        """
+        Output the final commanded moment, combining filtering (not 
+        implemented) and finite differentiation functions with a 
+        projection-based B-dot control law.
+        """
         # update self.B_array with raw value
         self.B_array = np.roll(self.B_array, -1, axis=0)
         self.B_array[-1] = B_reading # updates latest B value in array
@@ -203,16 +232,23 @@ class BDotController:
         # calculate B dot
         Bdot = self.finite_differentiate(filtered_B_arr)
         
-        # Calculate desired moment
-        ## calculate the orbital angular velocity (time-constant)
-        omega = (self.orbit.GP / self.orbit.SEMI ** 3) ** 0.5
+        # ------ Calculate Desired Moment ------
+        orbital_angular_vel = np.sqrt((self.orbit.GP / self.orbit.SEMI ** 3))
         ## calculate the scalar gain
-        k = 2 * omega * (1 + np.sin(self.orbit.INCL)) * self.min_inertia_tensor
+        k = (
+            2 * orbital_angular_vel * (1 + np.sin(self.orbit.INCL)) 
+            * self.min_inertia_tensor
+        )
         ## BDot control law
         moment = -k / np.linalg.norm(filtered_B_arr[-1]) * Bdot
         return moment
     
     def stepchange(self, B_reading, angular_velocity: np.ndarray):
+        """
+        Return the independent commanded moments for each magnetorquer (axis) 
+        depending on the mode, implementing using PWM instead of directly 
+        varying the current (or induced moment).
+        """
         while self.mode >= 0 and self.mode_length == 0:
             self.increment_mode()
 
@@ -228,7 +264,9 @@ class BDotController:
             self.moment = self.update_desired_moment(B_reading)
             abs_moment_ratio = np.absolute(self.moment / self.max_moment)
             duty_time = self.mode_lengths[2]
-            self.t_on = duty_time * np.clip(abs_moment_ratio, a_min=0, a_max=1)
+            self.t_on = duty_time * np.clip(
+                abs_moment_ratio, a_min=0, a_max=1
+            )
             self.increment_mode()
             return np.zeros(( 3 ))
         if self.mode == 2: # on (actuating) mode
@@ -238,7 +276,9 @@ class BDotController:
                     or np.abs(angular_velocity[i]) < math.radians(1)):
                     actual_moment[i] = 0.
                 else:
-                    actual_moment[i] = np.sign(self.moment[i]) * self.max_moment[i]
+                    actual_moment[i] = (
+                        np.sign(self.moment[i]) * self.max_moment[i]
+                    )
             self.increment_mode()
             return actual_moment
 
@@ -250,12 +290,13 @@ class IGRFModel:
         self.orbit = orbital_model
 
     def return_B_ECI(self, date: datetime.date):
-        '''
+        """
         Series of transformations to convert Kepler elements in orbital model
-        to position vector in geodetic coordinates (lon, lat, height) needed by
-        the IGRF model. Then passes through ppigrf to get ENU (east, north, up)
-        coordinates of B field vector, which is converted to ECI frame.
-        '''
+        to position vector in geodetic coordinates (lon, lat, height) needed 
+        by the IGRF model. Then passes through ppigrf to get ENU 
+        (east, north, up) coordinates of B field vector, which is converted 
+        into the ECI frame.
+        """
         # get ecef position vector
         eci = self.Kepler_to_ECI()
         ecef = self.ECI_to_ECEF(eci)
@@ -281,10 +322,10 @@ class IGRFModel:
         return B_eci
 
     def ECEF_to_geodetic(self, coordinates):
-        '''
+        """
         Convert an ECEF position in metres to geodetic coordinates.
         Written with AI assistance.
-        '''
+        """
         x, y, z = coordinates
         semi_major_axis = 6378137.0
         eccentricity_squared = 6.69437999014e-3
@@ -293,7 +334,9 @@ class IGRFModel:
 
         if horizontal_radius < 1e-12:
             latitude = math.copysign(math.pi / 2, z)
-            height = abs(z) - semi_major_axis * math.sqrt(1 - eccentricity_squared)
+            height = abs(z) - semi_major_axis * math.sqrt(
+                1 - eccentricity_squared
+            )
         else:
             latitude = math.atan2(
                 z, horizontal_radius * (1 - eccentricity_squared)
@@ -303,12 +346,13 @@ class IGRFModel:
                     1 - eccentricity_squared * math.sin(latitude) ** 2
                 )
                 height = (
-                    horizontal_radius / math.cos(latitude) - prime_vertical_radius
+                    horizontal_radius / math.cos(latitude) 
+                    - prime_vertical_radius
                 )
                 latitude = math.atan2(
                     z, 
                     horizontal_radius * (
-                        1 - eccentricity_squared * prime_vertical_radius
+                        1 - eccentricity_squared * prime_vertical_radius 
                         / (prime_vertical_radius + height)
                     )
                 )
@@ -316,24 +360,32 @@ class IGRFModel:
         return math.degrees(longitude), math.degrees(latitude), height / 1000
             
     def Kepler_to_ECI(self):
-        '''
+        """
         Accesses instance attributes of Orbit and uses them to calculate 
         a position vector of the satellite in the perifocal frame, then 
         transform into the ECI frame.
-        '''
+        """
 
-        r_peri = np.array([math.cos(self.orbit.ANOM), math.sin(self.orbit.ANOM), 0])
-        r_peri *= self.orbit.SEMI * (1 - self.orbit.ECCT ** 2) / (1 + self.orbit.ECCT * math.cos(self.orbit.ANOM))
-        rot = Rotation.from_euler("ZXZ", [self.orbit.RAAN, self.orbit.INCL, self.orbit.ARGP])
+        coeff = (
+            self.orbit.SEMI * (1 - self.orbit.ECCT ** 2) 
+            / (1 + self.orbit.ECCT * math.cos(self.orbit.ANOM))
+        )
+        r_peri = (
+            np.array([math.cos(self.orbit.ANOM), math.sin(self.orbit.ANOM), 0])
+            * coeff
+        )
+        rot = Rotation.from_euler(
+            "ZXZ", [self.orbit.RAAN, self.orbit.INCL, self.orbit.ARGP]
+        )
         r_ECI = rot.as_matrix() @ r_peri
         return r_ECI
 
     def ECI_to_ECEF(self, coordinates, direction="forward"):
-        '''
-        eta represents the change in rotation from the time ECI and ECEF frames 
-        coincided. direction="forward" represents ECI -> ECEF  transformation 
-        while direction="reverse" represents ECEF -> ECI.
-        '''
+        """
+        eta represents the change in rotation from the time ECI and ECEF 
+        frames coincided. direction="forward" represents the ECI -> ECEF 
+        transformation while direction="reverse" represents ECEF -> ECI.
+        """
         eta = self.omega_E * self.orbit.last_periapsis
         rot = Rotation.from_euler("Z", -eta)
         if direction == "forward":
@@ -348,27 +400,35 @@ class OrbitalModel:
     GP: Final = 3.986004418e14    # gravitational parameter of Earth
     
     def __init__(self):
-        self.SEMI = self.INCL = self.RAAN = self.ARGP = self.ANOM = self.ECCT = np.nan
+        self.SEMI = self.INCL = self.RAAN = self.ARGP = self.ANOM = self.ECCT\
+            = np.nan
         for key, value in KEPLER_INITIAL.items():
             setattr(self, key, value)
 
         self.eccentric_anomaly = 0.
-        self.last_periapsis = 0.  # time since passed periapsis (coincides with ANOM = 0)
+        # time since passed periapsis (coincided with ANOM = 0)
+        self.last_periapsis = 0.
         self.dQ = np.nan # rate of change of RAAN (constant)
         self.dA = np.nan # rate of change of argument of periapsis (constant)
     
     def model_J2_effect(self):
-        '''
+        """
         Models the J2 perturbation effect caused by the Earth's oblateness.
-        Changes 2 Kepler elements (orbital parameters) by a constant amount per 
-        timestep.
-        '''
+        Changes 2 Kepler elements (orbital parameters) by a constant amount 
+        per timestep.
+        """
         if np.isnan(self.dQ):
-            raan_numer = -3 * self.J2_const * self.RE**2 * math.sqrt(self.GP) * math.cos(self.INCL)
+            raan_numer = (
+                -3 * self.J2_const * self.RE**2 * math.sqrt(self.GP) 
+                * math.cos(self.INCL)
+            )
             raan_denom = 2 * self.SEMI**3.5 * (1 - self.ECCT**2)**2
             self.dQ = raan_numer / raan_denom
         if np.isnan(self.dA):
-            arg_perigee_numer = 3 * self.J2_const * self.RE**2 * math.sqrt(self.GP) * (4 - 5 * math.sin(self.INCL)**2)
+            arg_perigee_numer = (
+                3 * self.J2_const * self.RE**2 * math.sqrt(self.GP) 
+                * (4 - 5 * math.sin(self.INCL)**2)
+            )
             arg_perigee_denom = 4 * self.SEMI**3.5 * (1 - self.ECCT**2)**2
             self.dA = arg_perigee_numer / arg_perigee_denom
 
@@ -378,24 +438,24 @@ class OrbitalModel:
         self.ARGP = self.ARGP % (2 * math.pi)
 
     def update_true_anomaly(self):
-        '''
+        """
         Solves for the true anomaly of the satellite per timestep using 
         Newton's iterative method.
-        '''
-        mean_motion = (self.GP / self.SEMI**3) ** 0.5                           # units: rad/s
-        mean_anomaly = (mean_motion * self.last_periapsis) % (2 * math.pi)      # units: rad
+        """
+        mean_motion = np.sqrt((self.GP / self.SEMI**3)) # (rad/s)
+        mean_anomaly = (mean_motion * self.last_periapsis) % (2 * math.pi) # (rad)
 
         def f(x):
             return (x - self.ECCT * math.sin(x) - mean_anomaly)
         
-        self.eccentric_anomaly = root_scalar(f, x0=self.eccentric_anomaly, method="newton").root
+        self.eccentric_anomaly = root_scalar(
+            f, x0=self.eccentric_anomaly, method="newton"
+        ).root
         true_anomaly = 2 * math.atan2(
-            math.sqrt(1 + self.ECCT)
-            * math.sin(self.eccentric_anomaly / 2),
-            math.sqrt(1 - self.ECCT)
-            * math.cos(self.eccentric_anomaly / 2),
+            math.sqrt(1 + self.ECCT) * math.sin(self.eccentric_anomaly / 2),
+            math.sqrt(1 - self.ECCT) * math.cos(self.eccentric_anomaly / 2)
         )
-        self.ANOM = true_anomaly % (2 * math.pi) # bounds true anomaly to [0, 2pi]
+        self.ANOM = true_anomaly % (2 * math.pi) # bounds ANOM to [0, 2pi]
 
     def update_all_orbital_parameters(self, seconds_passed):
         self.last_periapsis = seconds_passed
@@ -412,18 +472,18 @@ class SatelliteDynamics:
         self.orbit = orbital_model
         
     def get_DCM_matrix(self):
-        '''
+        """
         Create direction cosine matrix that describes transformation from ECI 
         to satellite body frame.
-        '''
+        """
         r = Rotation.from_quat(self.q, scalar_first=True).inv()
         return r.as_matrix()
 
     def add_B_noise(self, true_B):
-        '''
+        """
         Simulates added noise and least significant bit error to 
         magnetometer readings.
-        '''
+        """
         static_noise = MAGNETOMETER_HARD_IRON_BIAS * 1e-6
         rng = np.random.default_rng()
         random_noise = rng.normal(loc=0.0, scale=1.8408e-6, size=3)
@@ -434,21 +494,21 @@ class SatelliteDynamics:
         return raw_B
 
     def compute_net_torque(self, commanded_moment, B_body):
-        '''
+        """
         Computes effected torque from commanded dipole moment. 
         
         SKIPPED DUE TO TIME CONSTRAINTS: Add disturbance torques 
         (residual atmospheric drag, gravity gradient torque, and 
         residual magnetoric dipole and Lorentz forces).
-        '''
+        """
         return np.cross(commanded_moment, B_body)
 
     def RK4_step_integrator(self, func, dt, t0, y0):
-        '''
+        """
         The Fourth-Order Runge-Kutta (RK4) method integrates an ordinary 
         differential equation dy/dt = func(t, y), with y0 = y(t0) and
         dt = t_1 - t_0
-        '''
+        """
         f1 = func(t0, y0)
         f2 = func(t0 + dt/2, y0 + (dt/2) * f1)
         f3 = func(t0 + dt/2, y0 + (dt/2) * f2)
@@ -456,19 +516,20 @@ class SatelliteDynamics:
         y_final = y0 + (dt/6) * (f1 + 2*f2 + 2*f3 + f4)
         return y_final
     
-    def update_states(self, net_torque: np.ndarray, B_rot_matrix: np.ndarray, t0: float, dt: float):
-        '''
+    def update_states(self, net_torque: np.ndarray, B_rot_matrix: np.ndarray, 
+                      t0: float, dt: float):
+        """
         Update orientation (via a closed-form solution) and 
         angular velocity (using RK4 integration), assuming angular 
         velocity is virtually constant over a single timestep.
-        '''
+        """
         # Euler's rigid-body equation
         def w_dot(t, y):
-            return np.linalg.solve(self.I, net_torque - np.cross(y, self.I @ y))
+            return np.linalg.solve(
+                self.I, net_torque - np.cross(y, self.I @ y)
+            )
 
         w_new = self.RK4_step_integrator(w_dot, dt, t0, self.w)
-
-        # q maps ECI to body, so body angular velocity enters with a negative sign.
         w_mid = (self.w + w_new) / 2
         norm_w = np.linalg.norm(w_mid)
         inner = norm_w * dt / 2
