@@ -5,7 +5,7 @@ See it in action below! (This is only a 1-hour simulation; a full 8-hour simulat
 
 #### Issues fixed the morning after submission:
 
-* Change starting parameters - I realised I entered random placeholders for some parameters (e.g. inertia tensors 1) and forgot to change them to realistic values.
-* Changed line 155 from `np.min(INERTIA_MATRIX)` to `np.min(INERTIA_MATRIX.diagonal())`. Since the former always output 0 (for a diagonal matrix), BDot.update_desired_moment() would always output [0. 0. 0.]; this is now fixed.
-* Deleted method SimulationController.transform_B_Body(), which duplicated code in SimulationController.stepchange().
+* **Changed starting parameters** - I realised I entered random placeholders for some parameters (e.g. inertia tensors = 1) and forgot to change them to realistic values.
+* Changed line 155 from `np.min(INERTIA_MATRIX)` to `np.min(INERTIA_MATRIX.diagonal())`. Since the former always output 0 (for a diagonal matrix), `BDot.update_desired_moment()` would always output `[0. 0. 0.]`; this is now fixed.
+* Deleted method `SimulationController.transform_B_Body()`, which repeatetd code already in `SimulationController.stepchange()`.
 * Make progress indicator show every 5% for clarity.
