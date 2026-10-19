@@ -1,8 +1,13 @@
-## Announcement: The code is fully functional!
+## Announcement: The code is (partially) functional!
 
-See it in action below! (This is only a 1-hour simulation; a full 8-hour simulation takes around 1 hour to compute.)
+See it in action below:
 
+This is a 1-hour simulation:
 <img width="640" height="480" alt="Figure_1" src="https://github.com/user-attachments/assets/92373a65-f2d0-4c2e-80f1-f4e4296a544a" />
+
+A full simulation yields unexpected results:
+<img width="640" height="480" alt="Figure_2" src="https://github.com/user-attachments/assets/27749ca3-d003-4a02-82be-97c2aee5d5e6" />
+(A full 8-hour simulation takes around 1 hour to compute.)
 
 #### Issues fixed the morning after submission:
 
