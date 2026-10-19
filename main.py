@@ -435,17 +435,17 @@ class SatelliteDynamics:
         return np.cross(commanded_moment, B_body)
 
     def RK4_step_integrator(self, func, dt, t0, y0):
-            '''
-            The Fourth-Order Runge-Kutta (RK4) method integrates an ordinary 
-            differential equation dy/dt = func(t, y), with y0 = y(t0) and
-            dt = t_1 - t_0
-            '''
-            f1 = func(t0, y0)
-            f2 = func(t0 + dt/2, y0 + (dt/2) * f1)
-            f3 = func(t0 + dt/2, y0 + (dt/2) * f2)
-            f4 = func(t0 + dt, y0 + dt * f3)
-            y_final = y0 + (dt/6) * (f1 + 2*f2 + 2*f3 + f4)
-            return y_final
+        '''
+        The Fourth-Order Runge-Kutta (RK4) method integrates an ordinary 
+        differential equation dy/dt = func(t, y), with y0 = y(t0) and
+        dt = t_1 - t_0
+        '''
+        f1 = func(t0, y0)
+        f2 = func(t0 + dt/2, y0 + (dt/2) * f1)
+        f3 = func(t0 + dt/2, y0 + (dt/2) * f2)
+        f4 = func(t0 + dt, y0 + dt * f3)
+        y_final = y0 + (dt/6) * (f1 + 2*f2 + 2*f3 + f4)
+        return y_final
     
     def update_states(self, net_torque: np.ndarray, B_rot_matrix: np.ndarray, t0: float, dt: float):
         # Euler's rigid-body equation
