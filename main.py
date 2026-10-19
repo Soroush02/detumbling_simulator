@@ -484,7 +484,7 @@ class SatelliteDynamics:
         else:
             q_new = (
                 np.cos(inner) * np.identity(4)
-                + np.sin(inner) / norm_w * omega_matrix
+                - np.sin(inner) / norm_w * omega_matrix
             ) @ self.q
             q_new /= np.linalg.norm(q_new)
 
