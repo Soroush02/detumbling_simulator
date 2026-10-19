@@ -23,24 +23,24 @@ def main():
 
 
 def validate_time_steps():
-        total_steps = DT_CONTROLLER / DT_SIMULATOR
-        if total_steps.is_integer():
-            controller_period = total_steps * DT_SIMULATOR
-        else:
-            total_steps = round(total_steps)
-            controller_period = total_steps * DT_SIMULATOR
-            print(f"Adjusted DT_CONTROLLER (controller period) to: {controller_period} s")
+    total_steps = DT_CONTROLLER / DT_SIMULATOR
+    if total_steps.is_integer():
+        controller_period = total_steps * DT_SIMULATOR
+    else:
+        total_steps = round(total_steps)
+        controller_period = total_steps * DT_SIMULATOR
+        print(f"Adjusted DT_CONTROLLER (controller period) to: {controller_period} s")
 
-        # Ensure dissipation time at least 0.25 s
-        if (1 - DUTY_CYCLE) * DT_CONTROLLER < 0.025:
-            print("Duty cycle increased to meet minimum magnetorquer dissipation time requirements.")
-            duty_steps = total_steps - math.ceil(0.025 / DT_SIMULATOR)
-            return int(total_steps), int(duty_steps)
-        duty_steps = DUTY_CYCLE * DT_CONTROLLER / DT_SIMULATOR
-        if not duty_steps.is_integer():
-            duty_steps = round(duty_steps)
-            print(f"Adjusted DUTY_CYCLE to: {duty_steps / controller_period * DT_SIMULATOR}")
+    # Ensure dissipation time at least 0.25 s
+    if (1 - DUTY_CYCLE) * DT_CONTROLLER < 0.025:
+        print("Duty cycle increased to meet minimum magnetorquer dissipation time requirements.")
+        duty_steps = total_steps - math.ceil(0.025 / DT_SIMULATOR)
         return int(total_steps), int(duty_steps)
+    duty_steps = DUTY_CYCLE * DT_CONTROLLER / DT_SIMULATOR
+    if not duty_steps.is_integer():
+        duty_steps = round(duty_steps)
+        print(f"Adjusted DUTY_CYCLE to: {duty_steps / controller_period * DT_SIMULATOR}")
+    return int(total_steps), int(duty_steps)
 
 
 class SimulationController:
@@ -67,6 +67,13 @@ class SimulationController:
         return self.real_time >= end_time
         
     def stepchange(self):
+        '''
+        Overall simulator logic; updates orbital parameters, calculates state 
+        changes, manages B-dot controller, and gets net torque per physics timestep, 
+        using methods from all classes. Then plots results once the simulation is 
+        finished.
+        '''
+        
         total_duration = MAX_SIM_HOURS * 3600
         progress_interval = total_duration / 100
         next_progress = progress_interval
@@ -87,7 +94,6 @@ class SimulationController:
             # Converts B vector from ECI to satellite body frame
             B_rot_matrix = self.sat_model.get_DCM_matrix()
             B_body_true = B_rot_matrix @ B_eci
-            
             B_body_noisy = self.sat_model.add_B_noise(B_body_true)
 
             commanded_moment = self.bdot.stepchange(B_body_noisy, self.sat_model.w)
@@ -98,6 +104,7 @@ class SimulationController:
             elapsed_seconds = (self.real_time - self.start_time).total_seconds()
             self.angular_velocity_times.append(elapsed_seconds)
             self.angular_velocity_history.append(self.sat_model.w.copy())
+            
             if elapsed_seconds >= next_progress:
                 progress = min(100, 100 * elapsed_seconds / total_duration)
                 print(f"Simulation progress: {progress:.0f}%")
@@ -241,7 +248,8 @@ class BDotController:
 
 
 class IGRFModel:
-    omega_E = 7.2921151467 * 10**(-5) # mean angular velocity of the Earth (rad/s)
+    omega_E = 7.2921151467e-5 # mean angular velocity of the Earth (rad/s)
+    
     def __init__(self, orbital_model):
         self.orbit = orbital_model
 
@@ -263,7 +271,7 @@ class IGRFModel:
         igrf_date = datetime.datetime.combine(date, datetime.time.min)
         B_components = ppigrf.igrf(lon, lat, height, igrf_date)
         B_enu = np.array([component[0] for component in B_components])
-        B_enu /= 10**9 # nanotesla to tesla (SI unit)
+        B_enu /= 1e9 # nanotesla to tesla (SI unit)
 
         lon_rad, lat_rad = math.radians(lon), math.radians(lat)
         sin_lon, cos_lon = math.sin(lon_rad), math.cos(lon_rad)
@@ -291,9 +299,7 @@ class IGRFModel:
 
         if horizontal_radius < 1e-12:
             latitude = math.copysign(math.pi / 2, z)
-            height = abs(z) - semi_major_axis * math.sqrt(
-                1 - eccentricity_squared
-            )
+            height = abs(z) - semi_major_axis * math.sqrt(1 - eccentricity_squared)
         else:
             latitude = math.atan2(
                 z, horizontal_radius * (1 - eccentricity_squared)
@@ -303,16 +309,14 @@ class IGRFModel:
                     1 - eccentricity_squared * math.sin(latitude) ** 2
                 )
                 height = (
-                    horizontal_radius / math.cos(latitude)
-                    - prime_vertical_radius
+                    horizontal_radius / math.cos(latitude) - prime_vertical_radius
                 )
                 latitude = math.atan2(
-                    z,
-                    horizontal_radius
-                    * (
+                    z, 
+                    horizontal_radius * (
                         1 - eccentricity_squared * prime_vertical_radius
                         / (prime_vertical_radius + height)
-                    ),
+                    )
                 )
 
         return math.degrees(longitude), math.degrees(latitude), height / 1000
@@ -345,9 +349,9 @@ class IGRFModel:
 
 
 class OrbitalModel:
-    J2_const = 1.08263 * 10**(-3)
-    RE: Final = 6371 * 10**3            # radius of Earth
-    GP: Final = 3.986004418 * 10**14    # gravitational parameter of Earth
+    J2_const = 1.08263e-3
+    RE: Final = 6371e3            # radius of Earth
+    GP: Final = 3.986004418e14    # gravitational parameter of Earth
     
     def __init__(self):
         self.SEMI = self.INCL = self.RAAN = self.ARGP = self.ANOM = self.ECCT = np.nan
@@ -361,11 +365,11 @@ class OrbitalModel:
     
     def model_J2_effect(self):            
         if np.isnan(self.dQ):
-            raan_numer = -3 * self.J2_const * self.RE**2 * self.GP**0.5 * math.cos(self.INCL)
+            raan_numer = -3 * self.J2_const * self.RE**2 * math.sqrt(self.GP) * math.cos(self.INCL)
             raan_denom = 2 * self.SEMI**3.5 * (1 - self.ECCT**2)**2
             self.dQ = raan_numer / raan_denom
         if np.isnan(self.dA):
-            arg_perigee_numer = 3 * self.J2_const * self.RE**2 * self.GP**0.5 * (4 - 5 * math.sin(self.INCL)**2)
+            arg_perigee_numer = 3 * self.J2_const * self.RE**2 * math.sqrt(self.GP) * (4 - 5 * math.sin(self.INCL)**2)
             arg_perigee_denom = 4 * self.SEMI**3.5 * (1 - self.ECCT**2)**2
             self.dA = arg_perigee_numer / arg_perigee_denom
 
